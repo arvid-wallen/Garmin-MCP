@@ -1,0 +1,34 @@
+{
+  "name": "garmin-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for the Garmin Connect Personal API, with a built-in OAuth 2.1 authorization server for claude.ai",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "dev": "tsx watch --env-file=.env src/http.ts",
+    "start": "node dist/http.js",
+    "stdio": "tsx src/stdio.ts"
+  },
+  "dependencies": {
+    "@garmin/fitsdk": "^21.221.0",
+    "@hono/node-server": "^2.1.6",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "fflate": "^0.8.3",
+    "hono": "^4.13.16",
+    "jose": "^6.2.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@types/node": "^22.15.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
+  }
+}
