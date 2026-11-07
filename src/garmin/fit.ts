@@ -241,19 +241,39 @@ function bestRollingMeans(series: Array<number | null>, windows: number[], zeroF
 const DISTANCES = [400, 1000, 1609.34, 5000, 10000, 21097.5, 42195];
 
 /** Fastest elapsed time for each standard distance, from cumulative distance. */
-/** Sports where pace (min/km) is the natural unit; everything else gets km/h. */
+/** Sports where pace (min/km) is the natural unit; swimming uses min/100 m; everything else gets km/h. */
 const PACE_SPORTS = new Set(['running', 'walking', 'hiking', 'trail_running', 'mountaineering', 'snowshoeing', 'cross_country_skiing']);
 
-function speedFields(speed: number | undefined, usePace: boolean): Record<string, string | number> {
+export type SpeedUnit = 'pace_km' | 'pace_100m' | 'kmh';
+
+export function speedUnitFor(sport: string): SpeedUnit {
+  if (sport === 'swimming') return 'pace_100m';
+  return PACE_SPORTS.has(sport) ? 'pace_km' : 'kmh';
+}
+
+/** min:sec per 100 m from m/s. */
+export function paceMinPer100m(speed: number | undefined): string | undefined {
+  if (!speed || speed <= 0.05) return undefined;
+  const sec = 100 / speed;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return s === 60 ? `${m + 1}:00` : `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function speedFields(speed: number | undefined, unit: SpeedUnit): Record<string, string | number> {
   if (speed === undefined || speed <= 0) return {};
-  if (usePace) {
+  if (unit === 'pace_km') {
     const pace = paceMinPerKm(speed);
     return pace ? { pace_min_per_km: pace } : {};
+  }
+  if (unit === 'pace_100m') {
+    const pace = paceMinPer100m(speed);
+    return pace ? { pace_min_per_100m: pace } : {};
   }
   return { speed_kmh: round(speed * 3.6, 1) };
 }
 
-function fastestDistances(samples: Sample[], usePace: boolean) {
+function fastestDistances(samples: Sample[], unit: SpeedUnit) {
   const pts = samples
     .map((s) => ({ t: s.t, d: s.values.distance_m }))
     .filter((p): p is { t: number; d: number } => p.d !== undefined);
@@ -276,7 +296,7 @@ function fastestDistances(samples: Sample[], usePace: boolean) {
       }
     }
     if (best < Infinity && best > 0) {
-      out.push({ distance_m: D, seconds: round(best, 1), ...speedFields(D / best, usePace) });
+      out.push({ distance_m: D, seconds: round(best, 1), ...speedFields(D / best, unit) });
     }
   }
   return out;
@@ -395,10 +415,10 @@ export function analyzeFit(bytes: Uint8Array, options: AnalyzeOptions = {}) {
 
   const sessionMsgs = list('sessionMesgs');
   const sport = String(sessionMsgs[0]?.sport ?? list('sportMesgs')[0]?.sport ?? '');
-  const usePace = PACE_SPORTS.has(sport);
+  const unit = speedUnitFor(sport);
   const sessions = sessionMsgs.map((s) => {
     const clean = cleanMessage(s);
-    const avg = speedFields(num(s.enhancedAvgSpeed) ?? num(s.avgSpeed), usePace);
+    const avg = speedFields(num(s.enhancedAvgSpeed) ?? num(s.avgSpeed), unit);
     for (const [k, v] of Object.entries(avg)) clean[`avg_${k}`] = v;
     return clean;
   });
@@ -424,7 +444,7 @@ export function analyzeFit(bytes: Uint8Array, options: AnalyzeOptions = {}) {
     const clean = cleanMessage(lap, LAP_FIELDS);
     const speed = num(lap.enhancedAvgSpeed) ?? num(lap.avgSpeed);
     if (speed !== undefined) clean.avgSpeed = round(speed);
-    return { lap: index + 1, ...clean, ...speedFields(speed, usePace) };
+    return { lap: index + 1, ...clean, ...speedFields(speed, unit) };
   });
 
   const rr = list('hrvMesgs').flatMap((h) => (Array.isArray(h.time) ? h.time : [])).filter((v): v is number => num(v) !== undefined && v > 0.25 && v < 2.5);
@@ -456,7 +476,7 @@ export function analyzeFit(bytes: Uint8Array, options: AnalyzeOptions = {}) {
     best_efforts: {
       power_w: hasPower ? bestRollingMeans(power1Hz, [5, 30, 60, 300, 600, 1200, 3600], true) : undefined,
       heart_rate: hasHr ? bestRollingMeans(hr1Hz, [60, 300, 1200, 3600], false) : undefined,
-      fastest_distances: fastestDistances(samples, usePace),
+      fastest_distances: fastestDistances(samples, unit),
     },
     beat_to_beat_hrv: beatToBeat,
     strength_sets: sets.length ? sets : undefined,
@@ -464,7 +484,12 @@ export function analyzeFit(bytes: Uint8Array, options: AnalyzeOptions = {}) {
       ? {
           count: lengths.length,
           active: lengths.filter((l) => l.lengthType === 'active').length,
-          lengths: lengths.length <= 200 ? lengths.map((l) => cleanMessage(l, ['startTime', 'totalTimerTime', 'totalStrokes', 'avgSpeed', 'swimStroke', 'avgSwimmingCadence', 'lengthType'])) : undefined,
+          lengths: lengths.length <= 200
+            ? lengths.map((l) => ({
+                ...cleanMessage(l, ['startTime', 'totalTimerTime', 'totalStrokes', 'avgSpeed', 'swimStroke', 'avgSwimmingCadence', 'lengthType']),
+                ...(l.lengthType === 'active' ? speedFields(num(l.avgSpeed), 'pace_100m') : {}),
+              }))
+            : undefined,
         }
       : undefined,
     splits: list('splitMesgs').slice(0, 100).map((s) => cleanMessage(s)),
