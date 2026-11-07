@@ -9,7 +9,7 @@ const START = new Date('2026-11-01T07:00:00Z');
 const DURATION = 1800; // 30 min
 
 /** A synthetic 30-minute run: speed 3.33 m/s (5:00/km), HR ramps 120->170, power 250W with a 300W 5-min block. */
-export function buildRunFit(withTimeInZone = true): Uint8Array {
+export function buildRunFit(withTimeInZone = true, sport = 'running'): Uint8Array {
   const e = new Encoder();
   const write = (num: number, mesg: Record<string, unknown>) => e.onMesg(num, mesg as never);
   write(MESG.FILE_ID, { type: 'activity', manufacturer: 'development', product: 1, timeCreated: START });
@@ -53,7 +53,7 @@ export function buildRunFit(withTimeInZone = true): Uint8Array {
   write(MESG.SESSION, {
     timestamp: end,
     startTime: START,
-    sport: 'running',
+    sport,
     subSport: 'generic',
     totalElapsedTime: DURATION,
     totalTimerTime: DURATION,
@@ -118,5 +118,19 @@ describe('FIT analysis', () => {
   it('formats pace', () => {
     expect(paceMinPerKm(1000 / 299.6)).toBe('5:00');
     expect(paceMinPerKm(0)).toBeUndefined();
+  });
+});
+
+describe('FIT analysis units', () => {
+  it('reports pace for running and km/h for cycling', () => {
+    const run = analyzeFit(buildRunFit());
+    expect(run.sessions[0]!.avg_pace_min_per_km).toBe('5:00');
+    expect(run.sessions[0]!.avg_speed_kmh).toBeUndefined();
+
+    const ride = analyzeFit(buildRunFit(true, 'cycling'));
+    expect(ride.sessions[0]!.avg_speed_kmh).toBe(12);
+    expect(ride.sessions[0]!.avg_pace_min_per_km).toBeUndefined();
+    expect(ride.laps![0]).toMatchObject({ speed_kmh: 12 });
+    expect(ride.best_efforts.fastest_distances[0]).toHaveProperty('speed_kmh');
   });
 });

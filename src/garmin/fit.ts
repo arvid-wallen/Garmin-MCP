@@ -241,13 +241,25 @@ function bestRollingMeans(series: Array<number | null>, windows: number[], zeroF
 const DISTANCES = [400, 1000, 1609.34, 5000, 10000, 21097.5, 42195];
 
 /** Fastest elapsed time for each standard distance, from cumulative distance. */
-function fastestDistances(samples: Sample[]) {
+/** Sports where pace (min/km) is the natural unit; everything else gets km/h. */
+const PACE_SPORTS = new Set(['running', 'walking', 'hiking', 'trail_running', 'mountaineering', 'snowshoeing', 'cross_country_skiing']);
+
+function speedFields(speed: number | undefined, usePace: boolean): Record<string, string | number> {
+  if (speed === undefined || speed <= 0) return {};
+  if (usePace) {
+    const pace = paceMinPerKm(speed);
+    return pace ? { pace_min_per_km: pace } : {};
+  }
+  return { speed_kmh: round(speed * 3.6, 1) };
+}
+
+function fastestDistances(samples: Sample[], usePace: boolean) {
   const pts = samples
     .map((s) => ({ t: s.t, d: s.values.distance_m }))
     .filter((p): p is { t: number; d: number } => p.d !== undefined);
   if (pts.length < 2) return [];
   const total = pts[pts.length - 1]!.d - pts[0]!.d;
-  const out: Array<{ distance_m: number; seconds: number; pace_min_per_km?: string }> = [];
+  const out: Array<Record<string, string | number>> = [];
   for (const D of DISTANCES) {
     if (D > total) break;
     let best = Infinity;
@@ -264,7 +276,7 @@ function fastestDistances(samples: Sample[]) {
       }
     }
     if (best < Infinity && best > 0) {
-      out.push({ distance_m: D, seconds: round(best, 1), pace_min_per_km: paceMinPerKm(D / best) });
+      out.push({ distance_m: D, seconds: round(best, 1), ...speedFields(D / best, usePace) });
     }
   }
   return out;
@@ -381,10 +393,13 @@ export function analyzeFit(bytes: Uint8Array, options: AnalyzeOptions = {}) {
   const hasPower = power1Hz.some((v) => v !== null);
   const hasHr = hr1Hz.some((v) => v !== null);
 
-  const sessions = list('sessionMesgs').map((s) => {
+  const sessionMsgs = list('sessionMesgs');
+  const sport = String(sessionMsgs[0]?.sport ?? list('sportMesgs')[0]?.sport ?? '');
+  const usePace = PACE_SPORTS.has(sport);
+  const sessions = sessionMsgs.map((s) => {
     const clean = cleanMessage(s);
-    const speed = num(s.enhancedAvgSpeed) ?? num(s.avgSpeed);
-    if (speed) clean.avg_pace_min_per_km = paceMinPerKm(speed);
+    const avg = speedFields(num(s.enhancedAvgSpeed) ?? num(s.avgSpeed), usePace);
+    for (const [k, v] of Object.entries(avg)) clean[`avg_${k}`] = v;
     return clean;
   });
 
@@ -409,8 +424,7 @@ export function analyzeFit(bytes: Uint8Array, options: AnalyzeOptions = {}) {
     const clean = cleanMessage(lap, LAP_FIELDS);
     const speed = num(lap.enhancedAvgSpeed) ?? num(lap.avgSpeed);
     if (speed !== undefined) clean.avgSpeed = round(speed);
-    const pace = paceMinPerKm(speed);
-    return { lap: index + 1, ...clean, ...(pace ? { pace_min_per_km: pace } : {}) };
+    return { lap: index + 1, ...clean, ...speedFields(speed, usePace) };
   });
 
   const rr = list('hrvMesgs').flatMap((h) => (Array.isArray(h.time) ? h.time : [])).filter((v): v is number => num(v) !== undefined && v > 0.25 && v < 2.5);
@@ -442,7 +456,7 @@ export function analyzeFit(bytes: Uint8Array, options: AnalyzeOptions = {}) {
     best_efforts: {
       power_w: hasPower ? bestRollingMeans(power1Hz, [5, 30, 60, 300, 600, 1200, 3600], true) : undefined,
       heart_rate: hasHr ? bestRollingMeans(hr1Hz, [60, 300, 1200, 3600], false) : undefined,
-      fastest_distances: fastestDistances(samples),
+      fastest_distances: fastestDistances(samples, usePace),
     },
     beat_to_beat_hrv: beatToBeat,
     strength_sets: sets.length ? sets : undefined,
