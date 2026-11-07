@@ -2,7 +2,7 @@ import { Encoder, Profile } from '@garmin/fitsdk';
 import { zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 
-import { analyzeFit, extractActivityFile, paceMinPerKm } from '../src/garmin/fit.js';
+import { analyzeFit, extractActivityFile, paceMinPer100m, paceMinPerKm } from '../src/garmin/fit.js';
 
 const MESG = Profile.MesgNum as unknown as Record<'FILE_ID' | 'EVENT' | 'RECORD' | 'LAP' | 'TIME_IN_ZONE' | 'SESSION' | 'ACTIVITY', number>;
 const START = new Date('2026-11-01T07:00:00Z');
@@ -132,5 +132,14 @@ describe('FIT analysis units', () => {
     expect(ride.sessions[0]!.avg_pace_min_per_km).toBeUndefined();
     expect(ride.laps![0]).toMatchObject({ speed_kmh: 12 });
     expect(ride.best_efforts.fastest_distances[0]).toHaveProperty('speed_kmh');
+  });
+
+  it('reports pace per 100 m for swimming', () => {
+    const swim = analyzeFit(buildRunFit(true, 'swimming'));
+    // Synthetic speed is 3.333 m/s, i.e. 30 s per 100 m.
+    expect(swim.sessions[0]!.avg_pace_min_per_100m).toBe('0:30');
+    expect(swim.sessions[0]!.avg_speed_kmh).toBeUndefined();
+    expect(swim.laps![0]).toMatchObject({ pace_min_per_100m: '0:30' });
+    expect(paceMinPer100m(100 / 118)).toBe('1:58');
   });
 });

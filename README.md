@@ -25,7 +25,7 @@ Some tools add work on top of the API.
 | Nutrition | `get_nutrition` |
 | Women's health | `get_menstrual_cycle_summary`, `get_menstrual_cycle_day` |
 | Activities | `search_activities` (all 30 Garmin filters), `get_activity`, `get_activity_workouts`, `get_wellness_activities` |
-| Activity analysis | `analyze_activity`: downloads the original FIT file and returns sessions, laps with pace, time in HR and power zones, best efforts (5 s to 60 min power, fastest 400 m to marathon), beat-to-beat HRV, strength sets, swim lengths, devices and a downsampled time series (HR, speed, power, cadence, altitude, running dynamics, optional GPS) |
+| Activity analysis | `analyze_activity`: downloads the original FIT file and returns sessions, laps with pace (min/km for foot sports, min/100 m for swimming, km/h otherwise), time in HR and power zones, best efforts (5 s to 60 min power, fastest 400 m to marathon), beat-to-beat HRV, strength sets, swim lengths, devices and a downsampled time series (HR, speed, power, cadence, altitude, running dynamics, optional GPS) |
 | Escape hatch | `garmin_api_get` for endpoints Garmin adds later |
 | Local mode only | `save_activity_file` (writes the original ZIP or FIT to disk) |
 
