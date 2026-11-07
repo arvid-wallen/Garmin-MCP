@@ -1,7 +1,7 @@
 /** Long-running HTTP server (Railway, Fly, Docker, local development). */
 import { serve } from '@hono/node-server';
 
-import { createApp } from './app.js';
+import { createApp } from './create-app.js';
 import { loadHttpConfig } from './config.js';
 
 const config = loadHttpConfig();

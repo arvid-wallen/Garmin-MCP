@@ -1,10 +1,13 @@
 /**
+ * Keep this the only file named app/index/server under src/: Vercel picks the
+ * first of src/app.ts, src/index.ts, src/server.ts as the Hono entry point.
+ *
  * Vercel entry point (Hono zero-config). Config is loaded lazily so a missing
  * environment variable produces a readable 500 instead of a crashed function.
  */
 import { Hono } from 'hono';
 
-import { createApp } from './app.js';
+import { createApp } from './create-app.js';
 import { loadHttpConfig } from './config.js';
 
 let app: ReturnType<typeof createApp> | undefined;
